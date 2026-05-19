@@ -1,0 +1,22 @@
+# targets/docker-compose.yml
+# DVWA — Damn Vulnerable Web Application
+# Legal target for testing Phantom locally
+
+version: "3.8"
+services:
+  dvwa:
+    image: vulnerables/web-dvwa
+    ports:
+      - "8080:80"
+    environment:
+      - MYSQL_ROOT_PASSWORD=dvwa
+    restart: unless-stopped
+
+  db:
+    image: mysql:5.7
+    environment:
+      MYSQL_ROOT_PASSWORD: dvwa
+      MYSQL_DATABASE: dvwa
+      MYSQL_USER: dvwa
+      MYSQL_PASSWORD: p@ssw0rd
+    restart: unless-stopped

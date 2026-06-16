@@ -1,20 +1,23 @@
-# Phantom Pentest Report
+# redblue-agents Security Report
 **Target:** http://localhost:8080
-**Date:** 2025-01-15 14:23:07
-**Tech Stack Detected:** Server:Apache/2.4.58, PoweredBy:PHP/8.1.2, WordPress
+**Security Grade:** F (0/100)
+**Date:** 2026-06-16 18:43:59
+**Tech Stack Detected:** Apache, Server:Apache/2.4.7, PoweredBy:PHP/5.6
 
 ---
 
 ## Executive Summary
 
-**4 finding(s)** identified across 3 tested vector(s).
+**8 finding(s)** identified across 1 tested vector(s).
+
+Automated analysis completed. Review the findings below, prioritising Critical and High severity issues first.
 
 | Severity | Count |
 |----------|-------|
 | 🔴 Critical | 1 |
-| 🟠 High | 1 |
+| 🟠 High | 3 |
 | 🟡 Medium | 2 |
-| 🔵 Low/Info | 0 |
+| 🔵 Low/Info | 2 |
 
 ---
 
@@ -24,17 +27,14 @@
 
 **CVSS Score:** 9.1 | **OWASP:** A07:2021 – Identification and Authentication Failures
 
-**Description:** The login endpoint accepts authentication requests without a valid recaptcha_v2 token. The CAPTCHA control exists only in client-side JavaScript and provides no protection against automation.
+**Description:** The login endpoint accepts authentication requests without a valid recaptcha_v2 token. The CAPTCHA exists only in client-side JavaScript and provides no protection against automation.
 
 **Evidence:**
 ```
-POST http://localhost:8080/login.php with 'g-recaptcha-response' field removed
-→ HTTP 200 OK
-→ Response body: no CAPTCHA error, session cookie returned
-→ Set-Cookie: PHPSESSID=abc123; path=/
+POST http://localhost:8080/login.php with 'g-recaptcha-response' removed → HTTP 200, no CAPTCHA error in response.
 ```
 
-**Remediation:** Validate the CAPTCHA token server-side on every authentication request before processing credentials. Reject requests that omit or submit an invalid token with HTTP 400.
+**Remediation:** Validate the CAPTCHA token server-side on every auth request before processing credentials. Reject missing/invalid tokens with HTTP 400.
 
 ---
 
@@ -42,56 +42,104 @@ POST http://localhost:8080/login.php with 'g-recaptcha-response' field removed
 
 **CVSS Score:** 7.5 | **OWASP:** A07:2021 – Identification and Authentication Failures
 
-**Description:** The authentication endpoint does not enforce rate limiting, enabling brute-force attacks without triggering any lockout or throttling mechanism.
+**Description:** The authentication endpoint does not enforce rate limiting, enabling brute-force.
 
 **Evidence:**
 ```
-20 sequential POST /login.php requests with invalid credentials
-→ All returned HTTP 200
-→ No 429 Too Many Requests received
-→ No account lockout message detected
-→ No progressive delay observed
+20 sequential failed logins with no 429 or lockout.
 ```
 
-**Remediation:** Implement rate limiting (max 5 failed attempts per IP per minute). Return HTTP 429 with Retry-After header. Consider progressive delays or CAPTCHA escalation after threshold.
+**Remediation:** Rate-limit auth (e.g. 5 failed attempts/IP/min), return HTTP 429 with Retry-After, and consider progressive delays or CAPTCHA escalation.
 
 ---
 
-### 3. 🟡 [MEDIUM] Multiple Security Headers Missing
+### 3. 🟠 [HIGH] Session ID Not Regenerated After Login (Session Fixation)
+
+**CVSS Score:** 7.1 | **OWASP:** A07:2021 – Identification and Authentication Failures
+
+**Description:** The session identifier stays the same before and after authentication, enabling session-fixation attacks.
+
+**Evidence:**
+```
+Session cookie 'PHPSESSID' kept the same value across login.
+```
+
+**Remediation:** Issue a fresh session ID on every successful login (and on privilege change).
+
+---
+
+### 4. 🟠 [HIGH] Authenticated Session Cookie Missing Security Flags
+
+**CVSS Score:** 6.5 | **OWASP:** A05:2021 – Security Misconfiguration
+
+**Description:** The live session cookie is missing one or more protective attributes.
+
+**Evidence:**
+```
+Cookie 'PHPSESSID' missing: httponly, secure, samesite.
+```
+
+**Remediation:** Set HttpOnly, Secure and SameSite=Lax/Strict on the session cookie.
+
+---
+
+### 5. 🟡 [MEDIUM] Multiple Security Headers Missing
 
 **CVSS Score:** 5.3 | **OWASP:** A05:2021 – Security Misconfiguration
 
-**Description:** Critical HTTP security headers are absent from all responses, exposing users to clickjacking, MIME sniffing, and cross-site scripting risks.
+**Description:** Critical security headers are absent from HTTP responses.
 
 **Evidence:**
 ```
-GET http://localhost:8080/login.php
-→ Content-Security-Policy: MISSING
-→ X-Frame-Options: MISSING
-→ X-Content-Type-Options: MISSING
-→ Strict-Transport-Security: MISSING
-→ Referrer-Policy: MISSING
+Missing: X-Frame-Options, X-Content-Type-Options, Content-Security-Policy, Strict-Transport-Security, Referrer-Policy, Permissions-Policy
 ```
 
-**Remediation:** Add security headers at the web server or application layer. Minimum recommended: CSP, X-Frame-Options: DENY, X-Content-Type-Options: nosniff, HSTS with min 1 year max-age.
+**Remediation:** Add security headers at the web server or application layer. Minimum: CSP, X-Frame-Options, X-Content-Type-Options, HSTS.
 
 ---
 
-### 4. 🟡 [MEDIUM] Possible Username Enumeration
+### 6. 🟡 [MEDIUM] Insecure Session Cookie Attributes
 
-**CVSS Score:** 5.3 | **OWASP:** A07:2021 – Identification and Authentication Failures
+**CVSS Score:** 5.0 | **OWASP:** A05:2021 – Security Misconfiguration
 
-**Description:** Different response characteristics for valid vs invalid usernames may allow an attacker to enumerate existing accounts before targeting them.
+**Description:** One or more cookies are missing HttpOnly, Secure or SameSite attributes.
 
 **Evidence:**
 ```
-POST /login.php | username=admin    → 312ms | body: 4,821 bytes
-POST /login.php | username=xz99q   → 87ms  | body: 4,643 bytes
-→ Timing difference: 225ms
-→ Body length difference: 178 bytes
+PHPSESSID: missing HttpOnly; PHPSESSID: missing Secure flag; PHPSESSID: missing SameSite
 ```
 
-**Remediation:** Return identical responses (timing, body length, status code) for all failed authentication attempts regardless of whether the username exists.
+**Remediation:** Set HttpOnly (blocks JS access), Secure (HTTPS-only) and SameSite=Lax/Strict on all session cookies.
+
+---
+
+### 7. 🔵 [LOW] Technology Disclosure via X-Powered-By Header
+
+**CVSS Score:** 3.1 | **OWASP:** A05:2021 – Security Misconfiguration
+
+**Description:** Server discloses backend technology in response headers.
+
+**Evidence:**
+```
+X-Powered-By: PHP/5.6
+```
+
+**Remediation:** Remove or obfuscate X-Powered-By and Server headers.
+
+---
+
+### 8. 🔵 [LOW] Authenticated Page Missing Cache-Control
+
+**CVSS Score:** 3.1 | **OWASP:** A05:2021 – Security Misconfiguration
+
+**Description:** Authenticated responses lack Cache-Control, so sensitive pages may be cached by browsers or proxies.
+
+**Evidence:**
+```
+No Cache-Control header on the post-login response.
+```
+
+**Remediation:** Send 'Cache-Control: no-store' on authenticated pages.
 
 ---
 
@@ -104,7 +152,7 @@ POST /login.php | username=xz99q   → 87ms  | body: 4,643 bytes
 | Content-Security-Policy | ❌ | Missing Content-Security-Policy — consider adding |
 | Strict-Transport-Security | ❌ | Missing Strict-Transport-Security — consider adding |
 | Referrer-Policy | ❌ | Missing Referrer-Policy — consider adding |
-| Permissions-Policy | ✅ | Permissions-Policy: camera=(), microphone=() |
+| Permissions-Policy | ❌ | Missing Permissions-Policy — consider adding |
 
 ---
 
@@ -131,30 +179,35 @@ POST /login.php | username=xz99q   → 87ms  | body: 4,643 bytes
 - `[recon]` Starting passive reconnaissance on http://localhost:8080
 - `[recon]` Response: HTTP 200
 - `[recon]` Analyzing security headers...
-- `[recon]` Missing security headers: X-Frame-Options, X-Content-Type-Options, Content-Security-Policy, Strict-Transport-Security, Referrer-Policy
+- `[recon]` Missing security headers: X-Frame-Options, X-Content-Type-Options, Content-Security-Policy, Strict-Transport-Security, Referrer-Policy, Permissions-Policy
 - `[context]` Finding added: [MEDIUM] Multiple Security Headers Missing
-- `[recon]` Tech stack signals matched: Server:Apache/2.4.58, PoweredBy:PHP/8.1.2
 - `[context]` Finding added: [LOW] Technology Disclosure via X-Powered-By Header
 - `[recon]` CAPTCHA identified: recaptcha_v2
-- `[recon]` Recon complete. Tech stack: ['Server:Apache/2.4.58', 'PoweredBy:PHP/8.1.2']
+- `[recon]` Cookie flag issues: PHPSESSID: missing HttpOnly; PHPSESSID: missing Secure flag; PHPSESSID: missing SameSite
+- `[context]` Finding added: [MEDIUM] Insecure Session Cookie Attributes
+- `[recon]` Login form found: POST http://localhost:8080/login.php (user='username', pass='password')
+- `[recon]` Recon complete. Tech stack: ['Apache', 'Server:Apache/2.4.7', 'PoweredBy:PHP/5.6']
 - `[recon]` CAPTCHA detected: True (recaptcha_v2)
 - `[attack]` Starting active testing phase.
-- `[attack]` Reading recon memory: captcha=recaptcha_v2, stack=['Server:Apache/2.4.58', 'PoweredBy:PHP/8.1.2']
+- `[attack]` Reading recon memory: captcha=recaptcha_v2, stack=['Apache', 'Server:Apache/2.4.7', 'PoweredBy:PHP/5.6']
 - `[attack]` Test plan: captcha_enforcement, rate_limiting, user_enumeration
 - `[attack]` Testing CAPTCHA server-side enforcement (type: recaptcha_v2)
-- `[attack]` CRITICAL: CAPTCHA not validated server-side. Request processed without token.
+- `[attack]` CRITICAL: CAPTCHA not validated server-side.
 - `[context]` Finding added: [CRITICAL] CAPTCHA Not Enforced Server-Side
-- `[attack]` Rate limit test: CAPTCHA enforcement is client_only — proceeding with rate limit test.
 - `[attack]` Testing rate limiting on authentication endpoint...
 - `[attack]` No rate limit or lockout after 20 requests. Flagging.
 - `[context]` Finding added: [HIGH] No Rate Limiting on Authentication Endpoint
 - `[attack]` Testing for user enumeration via response differences...
-- `[attack]` Possible user enumeration: timing diff=225ms, body diff=178b
-- `[context]` Finding added: [MEDIUM] Possible Username Enumeration
-- `[attack]` Attack phase complete. Vectors tested: 3
-- `[report]` Generating report. Total findings: 4
-- `[report]` Report written to reports/report_20250115_142307.md
+- `[attack]` No significant enumeration signal (timing diff=1ms).
+- `[attack]` Attack phase complete. Vectors tested: 1
+- `[auth]` Attempting authenticated login as 'admin' at http://localhost:8080/login.php
+- `[auth]` Login succeeded. Running authenticated checks.
+- `[context]` Finding added: [HIGH] Session ID Not Regenerated After Login (Session Fixation)
+- `[context]` Finding added: [HIGH] Authenticated Session Cookie Missing Security Flags
+- `[context]` Finding added: [LOW] Authenticated Page Missing Cache-Control
+- `[report]` Generating report. Total findings: 8
+- `[report]` Security grade: F (0/100)
 
 ---
 
-*Generated by [Phantom Pentest Agents](https://github.com/yourusername/phantom-pentest-agents) — for authorized security research only.*
+*Generated by redblue-agents — for authorized security research only.*

@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Informe de seguridad — http://localhost:8080</title>
+<style>
+  :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  body { margin:0; background:#f4f5f7; color:#1f2430; }
+  .wrap { max-width:860px; margin:0 auto; padding:24px 18px 60px; }
+  header { display:flex; align-items:center; gap:20px; background:#fff; border-radius:14px;
+            padding:22px; box-shadow:0 1px 4px rgba(0,0,0,.08); }
+  .grade { width:96px; height:96px; border-radius:50%; display:flex; align-items:center;
+            justify-content:center; font-size:42px; font-weight:800; color:#fff; flex:0 0 auto; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .meta { color:#5b6472; font-size:13px; margin:2px 0; }
+  .chips { margin:16px 0; }
+  .chip { display:inline-block; border:1px solid; border-radius:20px; padding:3px 12px;
+           margin:4px 6px 0 0; font-size:13px; font-weight:600; }
+  .panel { background:#fff; border-radius:14px; padding:20px; margin-top:18px;
+            box-shadow:0 1px 4px rgba(0,0,0,.08); }
+  .panel h2 { font-size:16px; margin:0 0 12px; }
+  ul.top { list-style:none; padding:0; margin:0; }
+  ul.top li { padding:8px 0; border-bottom:1px solid #eee; font-size:14px; }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:8px; }
+  details { border:1px solid #e6e8ec; border-radius:10px; margin:10px 0; overflow:hidden; }
+  summary { cursor:pointer; padding:12px 14px; font-weight:600; display:flex;
+             align-items:center; gap:10px; list-style:none; }
+  summary::-webkit-details-marker { display:none; }
+  .sev { color:#fff; font-size:11px; font-weight:700; padding:2px 8px; border-radius:6px; }
+  .body { padding:0 14px 14px; font-size:14px; line-height:1.5; }
+  .body .lbl { font-weight:700; color:#3a4150; margin-top:10px; }
+  pre { background:#0f1320; color:#d6e0ff; padding:12px; border-radius:8px; overflow:auto;
+         font-size:12.5px; }
+  .ok { font-size:16px; }
+  footer { color:#8a92a0; font-size:12px; text-align:center; margin-top:26px; }
+</style></head>
+<body><div class="wrap">
+  <header>
+    <div class="grade" style="background:#b00020">F</div>
+    <div>
+      <h1>Informe de seguridad</h1>
+      <p class="meta">Objetivo: <b>http://localhost:8080</b></p>
+      <p class="meta">Fecha: 2026-06-16 18:43 · Puntaje: 0/100 ·
+         8 hallazgo(s)</p>
+      <p class='meta'>🔐 Escaneo autenticado: login exitoso.</p>
+    </div>
+  </header>
+
+  <div class="chips"><span class='chip' style='border-color:#b00020;color:#b00020'>Crítico: 1</span><span class='chip' style='border-color:#e65100;color:#e65100'>Alto: 3</span><span class='chip' style='border-color:#f9a825;color:#f9a825'>Medio: 2</span><span class='chip' style='border-color:#1565c0;color:#1565c0'>Bajo: 2</span></div>
+
+  <div class="panel">
+    <h2>🔧 Arreglá primero</h2>
+    <ul class="top"><li><span class='dot' style='background:#b00020'></span><b>CAPTCHA Not Enforced Server-Side</b> — Riesgo grave: explotable con poco esfuerzo. Arreglar de inmediato.</li><li><span class='dot' style='background:#e65100'></span><b>No Rate Limiting on Authentication Endpoint</b> — Riesgo alto: debería arreglarse pronto.</li><li><span class='dot' style='background:#e65100'></span><b>Session ID Not Regenerated After Login (Session Fixation)</b> — Riesgo alto: debería arreglarse pronto.</li></ul>
+  </div>
+
+  <div class="panel">
+    <h2>📋 Hallazgos (8)</h2>
+    <details>
+  <summary><span class="sev" style="background:#b00020">Crítico</span>
+    CAPTCHA Not Enforced Server-Side</summary>
+  <div class="body">
+    <div class="lbl">Por qué importa</div>Riesgo grave: explotable con poco esfuerzo. Arreglar de inmediato.
+    <div class="lbl">Qué es</div>The login endpoint accepts authentication requests without a valid recaptcha_v2 token. The CAPTCHA exists only in client-side JavaScript and provides no protection against automation.
+    <div class="lbl">Cómo arreglarlo</div>Validate the CAPTCHA token server-side on every auth request before processing credentials. Reject missing/invalid tokens with HTTP 400.
+    <div class="lbl">Evidencia</div><pre>POST http://localhost:8080/login.php with &#x27;g-recaptcha-response&#x27; removed → HTTP 200, no CAPTCHA error in response.</pre>
+    <p class="meta">CVSS 9.1 · A07:2021 – Identification and Authentication Failures</p>
+  </div>
+</details>
+<details>
+  <summary><span class="sev" style="background:#e65100">Alto</span>
+    No Rate Limiting on Authentication Endpoint</summary>
+  <div class="body">
+    <div class="lbl">Por qué importa</div>Riesgo alto: debería arreglarse pronto.
+    <div class="lbl">Qué es</div>The authentication endpoint does not enforce rate limiting, enabling brute-force.
+    <div class="lbl">Cómo arreglarlo</div>Rate-limit auth (e.g. 5 failed attempts/IP/min), return HTTP 429 with Retry-After, and consider progressive delays or CAPTCHA escalation.
+    <div class="lbl">Evidencia</div><pre>20 sequential failed logins with no 429 or lockout.</pre>
+    <p class="meta">CVSS 7.5 · A07:2021 – Identification and Authentication Failures</p>
+  </div>
+</details>
+<details>
+  <summary><span class="sev" style="background:#e65100">Alto</span>
+    Session ID Not Regenerated After Login (Session Fixation)</summary>
+  <div class="body">
+    <div class="lbl">Por qué importa</div>Riesgo alto: debería arreglarse pronto.
+    <div class="lbl">Qué es</div>The session identifier stays the same before and after authentication, enabling session-fixation attacks.
+    <div class="lbl">Cómo arreglarlo</div>Issue a fresh session ID on every successful login (and on privilege change).
+    <div class="lbl">Evidencia</div><pre>Session cookie &#x27;PHPSESSID&#x27; kept the same value across login.</pre>
+    <p class="meta">CVSS 7.1 · A07:2021 – Identification and Authentication Failures</p>
+  </div>
+</details>
+<details>
+  <summary><span class="sev" style="background:#e65100">Alto</span>
+    Authenticated Session Cookie Missing Security Flags</summary>
+  <div class="body">
+    <div class="lbl">Por qué importa</div>Riesgo alto: debería arreglarse pronto.
+    <div class="lbl">Qué es</div>The live session cookie is missing one or more protective attributes.
+    <div class="lbl">Cómo arreglarlo</div>Set HttpOnly, Secure and SameSite=Lax/Strict on the session cookie.
+    <div class="lbl">Evidencia</div><pre>Cookie &#x27;PHPSESSID&#x27; missing: httponly, secure, samesite.</pre>
+    <p class="meta">CVSS 6.5 · A05:2021 – Security Misconfiguration</p>
+  </div>
+</details>
+<details>
+  <summary><span class="sev" style="background:#f9a825">Medio</span>
+    Multiple Security Headers Missing</summary>
+  <div class="body">
+    <div class="lbl">Por qué importa</div>Riesgo medio: conviene corregirlo.
+    <div class="lbl">Qué es</div>Critical security headers are absent from HTTP responses.
+    <div class="lbl">Cómo arreglarlo</div>Add security headers at the web server or application layer. Minimum: CSP, X-Frame-Options, X-Content-Type-Options, HSTS.
+    <div class="lbl">Evidencia</div><pre>Missing: X-Frame-Options, X-Content-Type-Options, Content-Security-Policy, Strict-Transport-Security, Referrer-Policy, Permissions-Policy</pre>
+    <p class="meta">CVSS 5.3 · A05:2021 – Security Misconfiguration</p>
+  </div>
+</details>
+<details>
+  <summary><span class="sev" style="background:#f9a825">Medio</span>
+    Insecure Session Cookie Attributes</summary>
+  <div class="body">
+    <div class="lbl">Por qué importa</div>Riesgo medio: conviene corregirlo.
+    <div class="lbl">Qué es</div>One or more cookies are missing HttpOnly, Secure or SameSite attributes.
+    <div class="lbl">Cómo arreglarlo</div>Set HttpOnly (blocks JS access), Secure (HTTPS-only) and SameSite=Lax/Strict on all session cookies.
+    <div class="lbl">Evidencia</div><pre>PHPSESSID: missing HttpOnly; PHPSESSID: missing Secure flag; PHPSESSID: missing SameSite</pre>
+    <p class="meta">CVSS 5.0 · A05:2021 – Security Misconfiguration</p>
+  </div>
+</details>
+<details>
+  <summary><span class="sev" style="background:#1565c0">Bajo</span>
+    Technology Disclosure via X-Powered-By Header</summary>
+  <div class="body">
+    <div class="lbl">Por qué importa</div>Riesgo bajo: mejora recomendada.
+    <div class="lbl">Qué es</div>Server discloses backend technology in response headers.
+    <div class="lbl">Cómo arreglarlo</div>Remove or obfuscate X-Powered-By and Server headers.
+    <div class="lbl">Evidencia</div><pre>X-Powered-By: PHP/5.6</pre>
+    <p class="meta">CVSS 3.1 · A05:2021 – Security Misconfiguration</p>
+  </div>
+</details>
+<details>
+  <summary><span class="sev" style="background:#1565c0">Bajo</span>
+    Authenticated Page Missing Cache-Control</summary>
+  <div class="body">
+    <div class="lbl">Por qué importa</div>Riesgo bajo: mejora recomendada.
+    <div class="lbl">Qué es</div>Authenticated responses lack Cache-Control, so sensitive pages may be cached by browsers or proxies.
+    <div class="lbl">Cómo arreglarlo</div>Send &#x27;Cache-Control: no-store&#x27; on authenticated pages.
+    <div class="lbl">Evidencia</div><pre>No Cache-Control header on the post-login response.</pre>
+    <p class="meta">CVSS 3.1 · A05:2021 – Security Misconfiguration</p>
+  </div>
+</details>
+  </div>
+
+  <footer>Generado por redblue-agents · solo para pruebas autorizadas.<br>
+  Detección heurística: confirmá manualmente antes de actuar.</footer>
+</div></body></html>

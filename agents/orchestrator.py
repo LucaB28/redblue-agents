@@ -17,6 +17,7 @@ from langgraph.graph import StateGraph, END
 from core.context import PentestContext
 from agents.recon_agent import run_recon
 from agents.attack_agent import run_attack
+from agents.auth_agent import run_auth
 from agents.report_agent import run_report
 
 
@@ -38,6 +39,10 @@ def build_graph(ctx: PentestContext, output_dir: str = "reports"):
         asyncio.run(run_attack(ctx))
         return ctx
 
+    def auth_node(_state):
+        asyncio.run(run_auth(ctx))
+        return ctx
+
     def report_node(_state):
         run_report(ctx, output_dir)
         return ctx
@@ -48,6 +53,7 @@ def build_graph(ctx: PentestContext, output_dir: str = "reports"):
 
     graph.add_node("recon", recon_node)
     graph.add_node("attack", attack_node)
+    graph.add_node("auth", auth_node)
     graph.add_node("report", report_node)
     graph.add_node("abort_node", abort_node)
 
@@ -56,7 +62,8 @@ def build_graph(ctx: PentestContext, output_dir: str = "reports"):
         "continue": "attack",
         "abort": "abort_node",
     })
-    graph.add_edge("attack", "report")
+    graph.add_edge("attack", "auth")
+    graph.add_edge("auth", "report")
     graph.add_edge("report", END)
     graph.add_edge("abort_node", END)
 

@@ -46,6 +46,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-llm", action="store_true",
                    help="Disable Claude reasoning; use deterministic heuristics only")
     p.add_argument("--model", default=None, help="Override ANTHROPIC_MODEL")
+    # Authenticated scan (optional) — uses credentials YOU own.
+    p.add_argument("--username", default=None, help="Login username for authenticated scan")
+    p.add_argument("--password", default=None, help="Login password for authenticated scan")
+    p.add_argument("--login-url", default=None,
+                   help="Override the detected login form action URL")
     return p
 
 
@@ -77,6 +82,13 @@ def main() -> int:
     ctx = PentestContext(target_url=args.target)
     ctx.scope = scope
     ctx.llm = llm
+    ctx.username = args.username
+    ctx.password = args.password
+    if args.login_url:
+        from core.context import LoginForm
+        ctx.login_form = LoginForm(action_url=args.login_url)
+    if args.username:
+        print("🔐 Authenticated scan enabled.\n")
 
     # Nodes close over `ctx`, so results land on our own reference.
     graph = build_graph(ctx, output_dir=args.output)
@@ -87,9 +99,10 @@ def main() -> int:
         return 1
 
     print(
-        f"\n✅ Done. {len(ctx.findings)} finding(s), "
-        f"{scope.requests_sent} active request(s) sent. Report in '{args.output}/'"
+        f"\n✅ Done. Grade: {ctx.grade} · {len(ctx.findings)} finding(s) · "
+        f"{scope.requests_sent} active request(s) sent."
     )
+    print(f"   Open the HTML report in '{args.output}/' (report_*.html) in your browser.")
     return 0
 
 

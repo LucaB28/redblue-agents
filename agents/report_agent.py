@@ -8,6 +8,7 @@ Markdown report including the agent reasoning chain.
 from datetime import datetime
 from pathlib import Path
 from core.context import PentestContext, Severity
+from core.report_render import compute_grade, render_html
 
 
 SEVERITY_ORDER = {
@@ -22,6 +23,10 @@ SEVERITY_ORDER = {
 def run_report(ctx: PentestContext, output_dir: str = "reports") -> str:
     ctx.log("report", f"Generating report. Total findings: {len(ctx.findings)}")
 
+    grade, score = compute_grade(ctx.findings)
+    ctx.grade = grade
+    ctx.log("report", f"Security grade: {grade} ({score}/100)")
+
     sorted_findings = sorted(ctx.findings, key=lambda f: SEVERITY_ORDER[f.severity])
 
     critical = [f for f in sorted_findings if f.severity == Severity.CRITICAL]
@@ -33,8 +38,9 @@ def run_report(ctx: PentestContext, output_dir: str = "reports") -> str:
 
     # Header
     lines += [
-        "# Phantom Pentest Report",
+        "# redblue-agents Security Report",
         f"**Target:** {ctx.target_url}",
+        f"**Security Grade:** {grade} ({score}/100)",
         f"**Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
         f"**Tech Stack Detected:** {', '.join(ctx.tech_stack) or 'Unknown'}",
         "",
@@ -145,14 +151,16 @@ def run_report(ctx: PentestContext, output_dir: str = "reports") -> str:
 
     report_md = "\n".join(lines)
 
-    # Write to file
+    # Write Markdown + self-contained HTML
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"{output_dir}/report_{timestamp}.md"
-    Path(filename).write_text(report_md, encoding="utf-8")
+    md_path = f"{output_dir}/report_{timestamp}.md"
+    html_path = f"{output_dir}/report_{timestamp}.html"
+    Path(md_path).write_text(report_md, encoding="utf-8")
+    Path(html_path).write_text(render_html(ctx, grade, score), encoding="utf-8")
 
-    ctx.log("report", f"Report written to {filename}")
-    return filename
+    ctx.log("report", f"Reports written: {md_path} and {html_path}")
+    return html_path
 
 
 def _executive_narrative(ctx: PentestContext, findings) -> str:

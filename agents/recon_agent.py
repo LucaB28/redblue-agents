@@ -205,6 +205,9 @@ def _analyze_cookies(ctx: PentestContext, response: httpx.Response) -> None:
 
 def _analyze_login_form(ctx: PentestContext, response: httpx.Response) -> None:
     """Discover the real login endpoint and field names from the page HTML."""
+    if ctx.login_form is not None:
+        ctx.log("recon", f"Using operator-provided login URL: {ctx.login_form.action_url}")
+        return
     form = detect_login_form(response.text, str(response.url))
     if form is None:
         ctx.log("recon", "No login form detected on landing page.")

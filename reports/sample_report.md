@@ -1,22 +1,23 @@
-# Phantom Pentest Report
+# redblue-agents Security Report
 **Target:** http://localhost:8080
-**Date:** 2026-06-16 18:35:13
+**Security Grade:** F (0/100)
+**Date:** 2026-06-16 18:43:59
 **Tech Stack Detected:** Apache, Server:Apache/2.4.7, PoweredBy:PHP/5.6
 
 ---
 
 ## Executive Summary
 
-**5 finding(s)** identified across 1 tested vector(s).
+**8 finding(s)** identified across 1 tested vector(s).
 
 Automated analysis completed. Review the findings below, prioritising Critical and High severity issues first.
 
 | Severity | Count |
 |----------|-------|
 | 🔴 Critical | 1 |
-| 🟠 High | 1 |
+| 🟠 High | 3 |
 | 🟡 Medium | 2 |
-| 🔵 Low/Info | 1 |
+| 🔵 Low/Info | 2 |
 
 ---
 
@@ -52,7 +53,37 @@ POST http://localhost:8080/login.php with 'g-recaptcha-response' removed → HTT
 
 ---
 
-### 3. 🟡 [MEDIUM] Multiple Security Headers Missing
+### 3. 🟠 [HIGH] Session ID Not Regenerated After Login (Session Fixation)
+
+**CVSS Score:** 7.1 | **OWASP:** A07:2021 – Identification and Authentication Failures
+
+**Description:** The session identifier stays the same before and after authentication, enabling session-fixation attacks.
+
+**Evidence:**
+```
+Session cookie 'PHPSESSID' kept the same value across login.
+```
+
+**Remediation:** Issue a fresh session ID on every successful login (and on privilege change).
+
+---
+
+### 4. 🟠 [HIGH] Authenticated Session Cookie Missing Security Flags
+
+**CVSS Score:** 6.5 | **OWASP:** A05:2021 – Security Misconfiguration
+
+**Description:** The live session cookie is missing one or more protective attributes.
+
+**Evidence:**
+```
+Cookie 'PHPSESSID' missing: httponly, secure, samesite.
+```
+
+**Remediation:** Set HttpOnly, Secure and SameSite=Lax/Strict on the session cookie.
+
+---
+
+### 5. 🟡 [MEDIUM] Multiple Security Headers Missing
 
 **CVSS Score:** 5.3 | **OWASP:** A05:2021 – Security Misconfiguration
 
@@ -67,7 +98,7 @@ Missing: X-Frame-Options, X-Content-Type-Options, Content-Security-Policy, Stric
 
 ---
 
-### 4. 🟡 [MEDIUM] Insecure Session Cookie Attributes
+### 6. 🟡 [MEDIUM] Insecure Session Cookie Attributes
 
 **CVSS Score:** 5.0 | **OWASP:** A05:2021 – Security Misconfiguration
 
@@ -82,7 +113,7 @@ PHPSESSID: missing HttpOnly; PHPSESSID: missing Secure flag; PHPSESSID: missing 
 
 ---
 
-### 5. 🔵 [LOW] Technology Disclosure via X-Powered-By Header
+### 7. 🔵 [LOW] Technology Disclosure via X-Powered-By Header
 
 **CVSS Score:** 3.1 | **OWASP:** A05:2021 – Security Misconfiguration
 
@@ -94,6 +125,21 @@ X-Powered-By: PHP/5.6
 ```
 
 **Remediation:** Remove or obfuscate X-Powered-By and Server headers.
+
+---
+
+### 8. 🔵 [LOW] Authenticated Page Missing Cache-Control
+
+**CVSS Score:** 3.1 | **OWASP:** A05:2021 – Security Misconfiguration
+
+**Description:** Authenticated responses lack Cache-Control, so sensitive pages may be cached by browsers or proxies.
+
+**Evidence:**
+```
+No Cache-Control header on the post-login response.
+```
+
+**Remediation:** Send 'Cache-Control: no-store' on authenticated pages.
 
 ---
 
@@ -152,9 +198,15 @@ X-Powered-By: PHP/5.6
 - `[attack]` No rate limit or lockout after 20 requests. Flagging.
 - `[context]` Finding added: [HIGH] No Rate Limiting on Authentication Endpoint
 - `[attack]` Testing for user enumeration via response differences...
-- `[attack]` No significant enumeration signal (timing diff=0ms).
+- `[attack]` No significant enumeration signal (timing diff=1ms).
 - `[attack]` Attack phase complete. Vectors tested: 1
-- `[report]` Generating report. Total findings: 5
+- `[auth]` Attempting authenticated login as 'admin' at http://localhost:8080/login.php
+- `[auth]` Login succeeded. Running authenticated checks.
+- `[context]` Finding added: [HIGH] Session ID Not Regenerated After Login (Session Fixation)
+- `[context]` Finding added: [HIGH] Authenticated Session Cookie Missing Security Flags
+- `[context]` Finding added: [LOW] Authenticated Page Missing Cache-Control
+- `[report]` Generating report. Total findings: 8
+- `[report]` Security grade: F (0/100)
 
 ---
 

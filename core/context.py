@@ -115,6 +115,14 @@ class PentestContext:
     captcha_enforcement: CaptchaEnforcement = CaptchaEnforcement.UNKNOWN
     rate_limit_result: RateLimitResult = field(default_factory=RateLimitResult)
 
+    # --- Authenticated scan (only when credentials supplied) ---
+    username: Optional[str] = None
+    password: Optional[str] = None
+    authenticated: Optional[bool] = None  # None = not attempted
+
+    # --- Computed by Report Agent ---
+    grade: Optional[str] = None  # A+ .. F, plain-language security grade
+
     # --- Written by all agents, consumed by Report Agent ---
     findings: list[Finding] = field(default_factory=list)
     reasoning_chain: list[ReasoningStep] = field(default_factory=list)

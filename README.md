@@ -9,10 +9,12 @@
 ![Tests](https://img.shields.io/badge/tests-pytest-blueviolet?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-gray?style=flat-square)
 
-Point it at a login page you own and it returns a Markdown report: missing
-security headers, insecure cookies, tech-stack disclosure, CAPTCHA that isn't
-enforced server-side, missing rate limiting, and username enumeration — each
-with severity, CVSS, OWASP category, evidence and a fix.
+Point it at a login page you own and it returns a **security grade (A–F)** and a
+**self-contained HTML report** (plus Markdown): missing security headers,
+insecure cookies, tech-stack disclosure, CAPTCHA that isn't enforced
+server-side, missing rate limiting, username enumeration, and — with credentials
+— session fixation and weak session cookies. Each finding has severity, CVSS,
+OWASP category, evidence, and a plain-language fix.
 
 It runs **without any API key** (deterministic checks). Add an
 `ANTHROPIC_API_KEY` and Claude additionally plans the attack phase and writes
@@ -45,7 +47,8 @@ cp .env.example .env          # then paste your ANTHROPIC_API_KEY into .env
 python main.py --target https://your-app.example.com --authorized
 ```
 
-The report is written to `reports/report_<timestamp>.md`.
+Open `reports/report_<timestamp>.html` in your browser — color-coded, with a
+grade and a "fix these first" list. A Markdown copy is written too.
 
 > No key? It still works — you'll see `Running in deterministic mode` and get
 > the same checks minus the LLM narrative.
@@ -69,11 +72,25 @@ usually only need the target URL:
 python main.py --target https://app.mycompany.com/login --authorized
 ```
 
+### Authenticated scan (check inside the login, not just the door)
+
+Give it credentials **you own** and it logs in, then checks the logged-in
+session — session fixation, session-cookie flags, cache headers:
+
+```bash
+python main.py --target https://app.mycompany.com \
+  --username you@example.com --password 'yourpass' --authorized
+```
+
+If auto-detection misses the form, point at it directly: `--login-url https://app.mycompany.com/api/login`.
+
 Useful flags (`python main.py --help` for all):
 
 | Flag | Purpose | Default |
 |------|---------|---------|
 | `--authorized` | Confirm permission, skip the prompt (use in CI) | off |
+| `--username` / `--password` | Enable authenticated scan with your own creds | off |
+| `--login-url URL` | Override the detected login form action | auto |
 | `--allow-host HOST` | Add an extra in-scope host (e.g. an API subdomain) | target only |
 | `--throttle SECONDS` | Minimum delay between active requests | `0.2` |
 | `--max-requests N` | Hard cap on total active requests | `60` |
@@ -93,6 +110,11 @@ Useful flags (`python main.py --help` for all):
 | CAPTCHA | Token not validated server-side (omit it, still accepted) | **Critical** |
 | Rate limiting | No 429 / lockout after rapid auth attempts | High |
 | Enumeration | Valid vs invalid usernames differ in timing/body | Medium |
+| Session fixation* | Session ID unchanged after login | High |
+| Session cookie* | Live session cookie missing HttpOnly/Secure/SameSite | High |
+| Cache* | Authenticated page missing `Cache-Control` | Low |
+
+\* only with `--username`/`--password` (authenticated scan).
 
 ---
 
@@ -102,8 +124,8 @@ Useful flags (`python main.py --help` for all):
 Orchestrator (LangGraph)
    │
    ▼
-Recon  ── shared PentestContext ──▶  Attack  ──▶  Report
-(blue)                               (red)        (markdown + reasoning)
+Recon ──▶ Attack ──▶ Auth ──▶ Report     (all share one PentestContext)
+(blue)    (red)      (creds)   (grade + HTML + markdown)
 ```
 
 - **Shared memory** — every agent reads/writes one `PentestContext` object.
@@ -128,14 +150,16 @@ See [`reports/sample_report.md`](reports/sample_report.md) for example output.
 redblue-agents/
 ├── main.py                  # CLI entry point
 ├── agents/
-│   ├── orchestrator.py      # LangGraph graph (nodes share one ctx)
+│   ├── orchestrator.py      # LangGraph graph (recon→attack→auth→report)
 │   ├── recon_agent.py       # passive analysis + login-form discovery
 │   ├── attack_agent.py      # active auth tests (scope-guarded)
-│   └── report_agent.py      # markdown report + exec summary
+│   ├── auth_agent.py        # authenticated scan (session fixation, cookies)
+│   └── report_agent.py      # markdown + HTML report, grade, exec summary
 ├── core/
 │   ├── context.py           # PentestContext — the shared memory model
 │   ├── forms.py             # login-form auto-detection (bs4 + regex fallback)
 │   ├── scope.py             # authorization / throttle / budget controls
+│   ├── report_render.py     # A–F grade + self-contained HTML report
 │   └── llm.py               # optional Claude wrapper (graceful fallback)
 ├── targets/docker-compose.yml
 ├── tests/                   # pytest suite

@@ -1,0 +1,23 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Test / tooling
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Generated reports (keep the sample)
+reports/report_*.md
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

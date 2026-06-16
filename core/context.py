@@ -43,6 +43,17 @@ class HeaderAnalysis:
 
 
 @dataclass
+class LoginForm:
+    """A login form discovered on the target by the recon agent."""
+    action_url: str
+    method: str = "post"
+    username_field: str = "username"
+    password_field: str = "password"
+    captcha_field: Optional[str] = None
+    extra_fields: dict = field(default_factory=dict)  # hidden inputs (CSRF, etc.)
+
+
+@dataclass
 class AuthVector:
     """A single auth test the attack agent performed."""
     name: str
@@ -97,6 +108,7 @@ class PentestContext:
     captcha_type: CaptchaType = CaptchaType.NONE
     cookies_analyzed: dict[str, dict] = field(default_factory=dict)
     cors_policy: Optional[str] = None
+    login_form: Optional["LoginForm"] = None
 
     # --- Populated by Attack Agent (informed by recon) ---
     auth_vectors_tested: list[AuthVector] = field(default_factory=list)
@@ -111,11 +123,19 @@ class PentestContext:
     abort: bool = False
     abort_reason: Optional[str] = None
 
+    # --- Injected config (not serialized into findings) ---
+    scope: object = None      # core.scope.ScopePolicy
+    llm: object = None        # core.llm.LLM
+    llm_notes: list = field(default_factory=list)  # narrative lines authored by Claude
+
     def log(self, agent: str, message: str) -> None:
         """Append a reasoning step. Called by any agent at any point."""
         self.reasoning_chain.append(ReasoningStep(agent=agent, message=message))
         print(f"[{agent}] {message}")
 
     def add_finding(self, finding: Finding) -> None:
+        # Deduplicate by title so re-runs / overlapping checks don't double-report.
+        if any(f.title == finding.title for f in self.findings):
+            return
         self.findings.append(finding)
         self.log("context", f"Finding added: [{finding.severity.value}] {finding.title}")

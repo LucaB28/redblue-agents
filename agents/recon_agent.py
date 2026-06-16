@@ -14,6 +14,7 @@ import httpx
 from core.context import (
     PentestContext, HeaderAnalysis, CaptchaType, Finding, Severity
 )
+from core.forms import detect_login_form
 
 
 SECURITY_HEADERS = [
@@ -72,6 +73,7 @@ async def run_recon(ctx: PentestContext) -> PentestContext:
         _analyze_captcha(ctx, response)
         _analyze_cookies(ctx, response)
         _analyze_cors(ctx, response)
+        _analyze_login_form(ctx, response)
 
     ctx.log("recon", f"Recon complete. Tech stack: {ctx.tech_stack or ['unknown']}")
     ctx.log("recon", f"CAPTCHA detected: {ctx.captcha_detected} ({ctx.captcha_type.value})")
@@ -154,22 +156,67 @@ def _analyze_captcha(ctx: PentestContext, response: httpx.Response) -> None:
 
 
 def _analyze_cookies(ctx: PentestContext, response: httpx.Response) -> None:
+    """
+    Parse raw Set-Cookie headers. The cookiejar drops the HttpOnly/SameSite
+    attributes (they aren't standard cookie attributes), so we read the raw
+    header values directly — that's the only reliable source for these flags.
+    """
     issues = []
-    for cookie in response.cookies.jar:
+    set_cookies = response.headers.get_list("set-cookie") if hasattr(
+        response.headers, "get_list"
+    ) else [response.headers["set-cookie"]] if "set-cookie" in response.headers else []
+
+    for raw in set_cookies:
+        name = raw.split("=", 1)[0].strip()
+        lower = raw.lower()
+        samesite = None
+        for part in raw.split(";"):
+            if part.strip().lower().startswith("samesite="):
+                samesite = part.split("=", 1)[1].strip()
         flags = {
-            "httponly": cookie.has_nonstandard_attr("HttpOnly") or getattr(cookie, "_rest", {}).get("HttpOnly") is not None,
-            "secure": bool(cookie.secure),
-            "samesite": cookie.get_nonstandard_attr("SameSite"),
+            "httponly": "httponly" in lower,
+            "secure": "secure" in lower,
+            "samesite": samesite,
         }
-        ctx.cookies_analyzed[cookie.name] = flags
+        ctx.cookies_analyzed[name] = flags
 
         if not flags["httponly"]:
-            issues.append(f"{cookie.name}: missing HttpOnly")
+            issues.append(f"{name}: missing HttpOnly")
         if not flags["secure"]:
-            issues.append(f"{cookie.name}: missing Secure flag")
+            issues.append(f"{name}: missing Secure flag")
+        if not flags["samesite"]:
+            issues.append(f"{name}: missing SameSite")
 
     if issues:
         ctx.log("recon", f"Cookie flag issues: {'; '.join(issues)}")
+        ctx.add_finding(Finding(
+            title="Insecure Session Cookie Attributes",
+            severity=Severity.MEDIUM,
+            owasp_category="A05:2021 – Security Misconfiguration",
+            cvss_score=5.0,
+            description="One or more cookies are missing HttpOnly, Secure or SameSite attributes.",
+            evidence="; ".join(issues),
+            remediation=(
+                "Set HttpOnly (blocks JS access), Secure (HTTPS-only) and "
+                "SameSite=Lax/Strict on all session cookies."
+            ),
+        ))
+
+
+def _analyze_login_form(ctx: PentestContext, response: httpx.Response) -> None:
+    """Discover the real login endpoint and field names from the page HTML."""
+    form = detect_login_form(response.text, str(response.url))
+    if form is None:
+        ctx.log("recon", "No login form detected on landing page.")
+        return
+    ctx.login_form = form
+    ctx.log(
+        "recon",
+        f"Login form found: {form.method.upper()} {form.action_url} "
+        f"(user='{form.username_field}', pass='{form.password_field}'"
+        + (f", captcha='{form.captcha_field}'" if form.captcha_field else "")
+        + ")",
+    )
 
 
 def _analyze_cors(ctx: PentestContext, response: httpx.Response) -> None:
